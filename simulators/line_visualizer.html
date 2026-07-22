@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>COEFAM — Twin-Line Production Simulator</title>
+<style>
+:root{
+  --bg:#0a1024; --bg2:#0e1730; --panel:#121e3d; --panel2:#16244a;
+  --line:#22345f; --line2:#2e447a; --ink:#eaf0ff; --mid:#9fb0d6; --faint:#5f739e;
+  --navy:#00016c; --teal:#17c3d6; --cyan:#5ecdfa;
+  --good:#35d07f; --warn:#ffb23e; --crit:#ff5a6a;
+  --lineA:#5ecdfa; --lineB:#c58cff; --belt:#1b2a4d; --floor:#141f3c;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:"Segoe UI",-apple-system,system-ui,Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:radial-gradient(120% 120% at 50% -10%,#12204a 0%,var(--bg) 55%);
+  color:var(--ink);font-family:var(--sans);overflow:hidden}
+.app{height:100vh;display:flex;flex-direction:column;gap:9px;padding:11px 13px}
+.top{display:flex;align-items:center;gap:13px;flex-shrink:0}
+.mark{width:34px;height:34px;border-radius:8px;background:#fff;color:var(--navy);
+  display:grid;place-items:center;font-weight:800;font-size:13px;flex-shrink:0}
+.title b{font-size:13.5px} .title span{display:block;font-family:var(--mono);font-size:10px;color:var(--mid)}
+.kv{margin-left:8px;display:flex;gap:15px;font-family:var(--mono);font-size:12px}
+.kv div span{display:block;color:var(--faint);font-size:9px;letter-spacing:.09em;text-transform:uppercase}
+.kv div b{color:var(--cyan);font-weight:600}
+.state{margin-left:auto;display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;
+  letter-spacing:.13em;padding:6px 12px;border:1px solid var(--line2);border-radius:20px;background:var(--panel)}
+.led{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 8px var(--good);animation:pulse 1.6s infinite}
+.state.paused .led{background:var(--warn);box-shadow:0 0 8px var(--warn);animation:none}
+@keyframes pulse{50%{opacity:.35}}
+
+.mid{flex:1;display:grid;grid-template-columns:1fr 292px;gap:9px;min-height:0}
+.stage{background:linear-gradient(180deg,var(--panel) 0%,var(--bg2) 100%);
+  border:1px solid var(--line);border-radius:12px;position:relative;overflow:hidden}
+canvas{display:block;width:100%;height:100%}
+.legend{position:absolute;left:12px;bottom:9px;display:flex;gap:13px;font-family:var(--mono);font-size:10px;color:var(--mid)}
+.legend i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:4px;vertical-align:-1px}
+
+.rail{display:flex;flex-direction:column;gap:9px;min-height:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px}
+.card h4{margin:0 0 9px;font-family:var(--mono);font-size:9px;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--faint);font-weight:600}
+.cmp{width:100%;border-collapse:collapse;font-family:var(--mono)}
+.cmp th{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:600;text-align:right;padding:0 0 7px}
+.cmp th:first-child{text-align:left}
+.cmp td{font-size:12px;padding:4.5px 0;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+.cmp td:first-child{text-align:left;color:var(--mid);font-size:11px;font-family:var(--sans)}
+.cmp .A{color:var(--lineA)} .cmp .B{color:var(--lineB)}
+.cmp td.win{color:var(--good);font-weight:700} .cmp td.lose{color:var(--crit)}
+.cmp tr.sep td{border-bottom:2px solid var(--line2);padding-top:8px}
+.dot{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:-1px}
+.log{flex:1;min-height:0;display:flex;flex-direction:column}
+.log ul{list-style:none;margin:0;padding:0;overflow:auto;flex:1;font-family:var(--mono);font-size:10.5px}
+.log li{display:flex;justify-content:space-between;gap:6px;padding:3px 2px;border-bottom:1px solid var(--line);color:var(--mid)}
+.log li b{color:var(--crit)} .log li .ln{width:16px;font-weight:700} .log li.empty{color:var(--faint);border:none}
+
+.controls{flex-shrink:0;display:flex;flex-direction:column;gap:7px}
+.lc{display:grid;grid-template-columns:78px repeat(3,1fr) auto;gap:9px;align-items:center;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 11px;border-left:3px solid var(--hue)}
+.lc .name{font-weight:700;font-size:12.5px;color:var(--hue);display:flex;align-items:center;gap:6px}
+.lc .st{display:flex;flex-direction:column;gap:2px}
+.lc .st .r{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--faint)}
+.lc .st .r b{color:var(--ink)} .lc .st .r b.out{color:var(--crit)}
+.lc input{width:100%;accent-color:var(--warn);margin:0}
+.lc .maint{font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 11px;border-radius:7px;
+  border:1px solid var(--line2);background:var(--panel2);color:var(--ink);cursor:pointer;white-space:nowrap}
+.lc .maint:hover{border-color:var(--good);color:var(--good)}
+.bar{display:flex;align-items:center;gap:11px}
+.btn{font-family:var(--sans);font-size:12.5px;font-weight:600;padding:7px 15px;border-radius:8px;
+  border:1px solid var(--line2);background:var(--panel2);color:var(--ink);cursor:pointer}
+.btn:hover{border-color:var(--teal)} .btn.primary{background:var(--teal);color:#04121a;border-color:var(--teal)}
+.speed{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11.5px;color:var(--mid)}
+.speed input{width:120px;accent-color:var(--teal)}
+.hint{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--faint)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="mark">ilx</div>
+    <div class="title"><b>Twin-Line Production Simulator</b><span>COEFAM · Smart Manufacturing</span></div>
+    <div class="kv">
+      <div><span>Work Order</span><b>WO-10432</b></div>
+      <div><span>Product</span><b>Bottle-500ml</b></div>
+    </div>
+    <div class="state" id="state"><span class="led"></span><span id="stateTxt">RUNNING</span></div>
+  </div>
+
+  <div class="mid">
+    <div class="stage"><canvas id="c"></canvas>
+      <div class="legend">
+        <span><i style="background:var(--lineA)"></i>Line A</span>
+        <span><i style="background:var(--lineB)"></i>Line B</span>
+        <span><i style="background:var(--good)"></i>Good</span>
+        <span><i style="background:var(--crit)"></i>Reject</span>
+      </div>
+    </div>
+    <div class="rail">
+      <div class="card">
+        <h4>Line Comparison</h4>
+        <table class="cmp">
+          <thead><tr><th>Metric</th><th class="A"><span class="dot" style="background:var(--lineA)"></span>A</th><th class="B"><span class="dot" style="background:var(--lineB)"></span>B</th></tr></thead>
+          <tbody id="cmpBody"></tbody>
+        </table>
+      </div>
+      <div class="card log">
+        <h4>Reject Log</h4>
+        <ul id="log"><li class="empty">No rejects yet.</li></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls" id="controls"></div>
+</div>
+
+<script>
+// ── config & shared physics ────────────────────────────────────────────
+const CFG = { target:500, idealCycle:2.0, caseSize:6, palletSize:6,
+  palletSpecKg:18.00, palletTolKg:0.03,
+  cost:{ material:0.004, elec:0.12, scrap:0.30 } };
+const STN = [
+  { key:"fill", name:"FILL", dwell:0.40, sample:w=>gauss(500+6.5*w,1.2+1.1*w) },
+  { key:"cap",  name:"CAP",  dwell:0.28, sample:w=>gauss(1.6-1.05*w,0.12+0.10*w) },
+  { key:"label",name:"LABEL",dwell:0.28, sample:w=>Math.abs(gauss(1.8+7.4*w,0.25+0.7*w)) },
+  { key:"insp", name:"INSPECT", dwell:0.40, inspect:true },
+];
+const SPEC = { weightLo:495, weightHi:503, torqueLo:1.10, offsetHi:2.0 };
+function gauss(m,s){ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random();
+  return m+s*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function judge(a){ const f=[];
+  if(a.weight>SPEC.weightHi)f.push("Overweight"); else if(a.weight<SPEC.weightLo)f.push("Underweight");
+  if(a.torque<SPEC.torqueLo)f.push("Cap Loose"); if(a.offset>SPEC.offsetHi)f.push("Label Skew"); return f; }
+
+// ── line (each owns a conveyor, a 6-axis robot, a pallet, a scale) ──────
+function makeLine(id,yFrac,hue){ return {
+  id, yFrac, hue,
+  wear:{fill:0,cap:0,label:0}, telem:{weight:500,torque:1.6,vib:1.8,power:0.35}, flash:[0,0,0,0],
+  bottles:[], box:{fill:0,wt:0}, readyBoxes:[], traySlot:0,
+  made:0, good:0, reject:0, reasons:{Overweight:0,Underweight:0,"Cap Loose":0,"Label Skew":0},
+  weights:[], matWasteG:0, elecKWh:0, scrapUnits:0, spawnT:0, t0:0,
+  robot:{ state:"idle", ee:{x:0,y:0}, carry:null, t:0 },
+  pallet:{ n:0, x:0, state:"load", boxes:[], wtG:0, t:0 },
+  shipped:{ pallets:0, units:0, lastKg:0 },
+  metrics(){ const el=Math.max(simTime-this.t0,1);
+    const a=0.98, p=Math.min(1,(this.made*CFG.idealCycle)/el), q=this.made?this.good/this.made:1;
+    const w=this.weights, n=w.length, mean=n?w.reduce((s,x)=>s+x,0)/n:500;
+    const std=n?Math.sqrt(w.reduce((s,x)=>s+(x-mean)**2,0)/n):0;
+    const cost=this.matWasteG*CFG.cost.material + this.elecKWh*CFG.cost.elec + this.scrapUnits*CFG.cost.scrap;
+    return { oee:a*p*q, rejRate:this.made?this.reject/this.made:0, avgW:mean, stdW:std,
+      power:this.telem.power, costPer100:this.made?cost/this.made*100:0,
+      pallets:this.shipped.pallets, palletKg:this.shipped.lastKg }; },
+}; }
+const LINES = [ makeLine("A",0.22,"--lineA"), makeLine("B",0.60,"--lineB") ];
+
+let simTime=0, running=true, speed=1;
+
+// ── geometry (each line is a full cell: conveyor | robot | pallet | scale) ─
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+let W=0,H=0,DPR=Math.min(devicePixelRatio||1,2);
+function resize(){ const r=cv.parentElement.getBoundingClientRect();
+  W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0); }
+new ResizeObserver(resize).observe(cv.parentElement); resize();
+const lineY=L=>H*L.yFrac;
+// The robot+pallet+scale is a FIXED-SIZE module anchored to the right edge (constant pixels,
+// so the arm never balloons on a big screen). The conveyor stretches to fill the space left of it.
+const boxOutX=()=> W-390;                       // where a full box waits for the robot
+const robotBase=L=>({x:W-300, y:lineY(L)+40});  // arm pedestal
+const palletX=()=> W-208, scaleX=()=> W-92;
+const L1=()=>58, L2=()=>58;                      // fixed link lengths → fixed reach envelope
+const stationX=i=>{ const m=W*0.04, right=boxOutX()-40; return m+(right-m)*(i/3); };
+const trayX=()=> stationX(3), trayTop=L=>lineY(L)+20, trayBot=L=>lineY(L)+52;
+
+// ── update ─────────────────────────────────────────────────────────────
+function update(dt){
+  simTime+=dt;
+  for(const L of LINES){
+    L.telem.weight += (STN[0].sample(L.wear.fill)-L.telem.weight)*Math.min(1,dt*4);
+    L.telem.torque += (STN[1].sample(L.wear.cap)-L.telem.torque)*Math.min(1,dt*4);
+    L.telem.vib    += (STN[2].sample(L.wear.label)-L.telem.vib)*Math.min(1,dt*4);
+    L.telem.power = 0.35 + 0.60*L.wear.cap;                 // worn bearing draws more
+    L.elecKWh += L.telem.power * (dt/3600);
+
+    L.spawnT-=dt; if(L.spawnT<=0){ spawn(L); L.spawnT=CFG.idealCycle; }
+    const belt=W*0.13, y=lineY(L);
+    for(const b of L.bottles){
+      if(b.state==="rejecting"){ const col=b.slot%4, row=(b.slot%16/4|0);
+        const tx=trayX()-13+col*8.5, ty=trayBot(L)-5-row*6;
+        b.vy+=560*dt; b.py+=b.vy*dt; b.px+=(tx-b.px)*Math.min(1,dt*4);
+        if(b.py>=ty){b.py=ty;b.px=tx;b.state="piled";} continue; }
+      if(b.state==="piled"||b.state==="boxed") continue;
+      const tx=stationX(b.stage);
+      if(b.x<tx-1){ b.x=Math.min(tx,b.x+belt*dt); }
+      else { b.dwell+=dt; L.flash[b.stage]=0.25;
+        if(b.dwell>=STN[b.stage].dwell){ b.dwell=0; const S=STN[b.stage];
+          if(S.key==="fill") b.attr.weight=S.sample(L.wear.fill);
+          if(S.key==="cap")  b.attr.torque=S.sample(L.wear.cap);
+          if(S.key==="label"){ const v=S.sample(L.wear.label); b.attr.offset=0.3+v*0.35; }
+          if(S.inspect){ const f=judge(b.attr); L.made++;
+            L.weights.push(b.attr.weight); if(L.weights.length>200)L.weights.shift();
+            if(b.attr.weight>500) L.matWasteG += b.attr.weight-500;
+            if(f.length){ b.result="fail"; b.reason=f[0]; b.state="rejecting";
+              b.slot=L.traySlot++; b.px=b.x; b.py=y-6; b.vy=-30; b.tilt=(Math.random()-.5)*1.3;
+              L.reject++; L.scrapUnits++; L.reasons[b.reason]++; logReject(L,b.reason); }
+            else { b.result="pass"; b.state="boxed"; b.gone=true; L.good++;
+              L.box.fill++; L.box.wt+=b.attr.weight;
+              if(L.box.fill>=CFG.caseSize){ L.readyBoxes.push({wt:L.box.wt}); L.box={fill:0,wt:0}; } }
+            if(L.made>=CFG.target){ L.t0=simTime; L.made=0;L.good=0;L.reject=0; }
+          } else b.stage++;
+        } }
+    }
+    L.bottles=L.bottles.filter(b=> !(b.state==="boxed"&&b.gone));
+    const piled=L.bottles.filter(b=>b.state==="piled");
+    if(piled.length>16){ const d=new Set(piled.slice(0,piled.length-16)); L.bottles=L.bottles.filter(b=>!d.has(b)); }
+    for(let i=0;i<L.flash.length;i++) L.flash[i]=Math.max(0,L.flash[i]-dt);
+    updateRobot(L,dt);
+    updatePallet(L,dt);
+  }
+}
+function spawn(L){ L.bottles.push({x:-26,stage:0,dwell:0,state:"proc",
+  attr:{weight:0,torque:0,offset:0},result:null,reason:"",px:0,py:0,vy:0,tilt:0}); }
+
+// each line's 6-axis robot: pick a full box off its own conveyor → its own pallet
+function updateRobot(L,dt){
+  const R=L.robot, P=L.pallet, base=robotBase(L);
+  R.ee.x=R.ee.x||base.x; R.ee.y=R.ee.y||(base.y-L1());
+  const reach=(tx,ty,spd)=>{ const dx=tx-R.ee.x,dy=ty-R.ee.y,d=Math.hypot(dx,dy);
+    if(d<spd*dt){R.ee.x=tx;R.ee.y=ty;return true;} R.ee.x+=dx/d*spd*dt;R.ee.y+=dy/d*spd*dt;return false; };
+  const spd=W*0.7;
+  switch(R.state){
+    case "idle":
+      if(P.state!=="load") break;
+      if(P.n>=CFG.palletSize){ P.state="toScale"; break; }
+      if(L.readyBoxes.length){ R.state="toPick"; } break;
+    case "toPick": if(reach(boxOutX(), lineY(L)+4, spd)){ const bx=L.readyBoxes.shift();
+        R.carry=bx||{wt:CFG.caseSize*500}; R.state="toPallet"; } break;
+    case "toPallet":{ const s=P.n, sx=palletX()-24+(s%3)*18, sy=palletY(L)-4-((s/3|0))*14;
+      if(reach(sx,sy,spd)){ P.boxes.push(R.carry); P.n++; P.wtG+=R.carry.wt; R.carry=null; R.state="home"; } break; }
+    case "home": if(reach(base.x, base.y-L1(), spd)) R.state="idle"; break;
+  }
+}
+const palletY=L=>lineY(L)+18;
+function updatePallet(L,dt){ const P=L.pallet;
+  if(P.state==="toScale"){ P.x=Math.min(scaleX()-palletX(), P.x+W*0.22*dt);
+    if(P.x>=scaleX()-palletX()){ P.state="weigh"; P.t=0; } }
+  else if(P.state==="weigh"){ P.t+=dt; if(P.t>1.1){ P.state="ship"; L.shipped.lastKg=P.wtG/1000; } }
+  else if(P.state==="ship"){ P.x+=W*0.45*dt; if(palletX()+P.x>W+70){
+    L.shipped.pallets++; L.shipped.units+=CFG.palletSize*CFG.caseSize;
+    L.pallet={n:0,x:0,state:"load",boxes:[],wtG:0,t:0}; } }
+}
+
+// ── draw ───────────────────────────────────────────────────────────────
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function draw(){ ctx.clearRect(0,0,W,H); for(const L of LINES) drawLine(L); }
+function drawLine(L){
+  const y=lineY(L), hue=css(L.hue), x0=W*0.025, x1=boxOutX()+14;
+  // conveyor
+  ctx.fillStyle=css('--belt'); rr(x0,y-11,x1-x0,34,9); ctx.fill();
+  ctx.strokeStyle=css('--line2'); ctx.lineWidth=1; ctx.stroke();
+  ctx.save(); ctx.beginPath(); rr(x0,y-11,x1-x0,34,9); ctx.clip();
+  ctx.strokeStyle="rgba(120,150,210,.14)"; ctx.lineWidth=3; const off=(simTime*W*0.13*speed)%22;
+  for(let x=x0-22+off;x<x1;x+=22){ctx.beginPath();ctx.moveTo(x,y-13);ctx.lineTo(x-9,y+24);ctx.stroke();} ctx.restore();
+  ctx.fillStyle=hue; ctx.font="700 11px "+css('--mono'); ctx.textAlign="left"; ctx.fillText("LINE "+L.id, x0+2, y-19);
+  // short reject tray
+  const tt=trayTop(L),tb=trayBot(L),tx=trayX();
+  ctx.fillStyle="rgba(255,90,106,.07)"; ctx.strokeStyle="rgba(255,90,106,.32)"; ctx.lineWidth=1;
+  rr(tx-20,tt,40,tb-tt,6); ctx.fill(); ctx.stroke();
+  ctx.fillStyle=css('--crit'); ctx.font="600 8.5px "+css('--mono'); ctx.textAlign="center"; ctx.fillText(L.reject,tx,tb+9);
+  // stations
+  STN.forEach((s,i)=>{ const x=stationX(i), fl=L.flash[i]>0, w=s.key?L.wear[s.key]:0;
+    const edge=w>0.66?css('--crit'):w>0.33?css('--warn'):(fl?css('--teal'):css('--line2'));
+    ctx.fillStyle=fl?css('--panel2'):css('--panel'); ctx.strokeStyle=edge; ctx.lineWidth=w>0.33||fl?2:1.1;
+    rr(x-27,y-48,54,29,7); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle=css('--line2'); ctx.beginPath();ctx.moveTo(x,y-19);ctx.lineTo(x,y-12);ctx.stroke();
+    ctx.fillStyle=w>0.66?css('--crit'):w>0.33?css('--warn'):(fl?css('--good'):css('--faint'));
+    ctx.beginPath();ctx.arc(x+20,y-41,2.8,0,7);ctx.fill();
+    ctx.fillStyle=css('--ink'); ctx.font="600 9px "+css('--mono'); ctx.textAlign="center"; ctx.fillText(s.name,x,y-29);
+  });
+  // box filling at conveyor end
+  const bx=boxOutX(); ctx.strokeStyle=hue; ctx.globalAlpha=.5; ctx.lineWidth=1.4; rr(bx-12,y-3,24,19,3); ctx.stroke(); ctx.globalAlpha=1;
+  ctx.fillStyle=hue; for(let i=0;i<L.box.fill;i++){ ctx.globalAlpha=.85;
+    ctx.beginPath();ctx.arc(bx-7+(i%3)*7,y+10-((i/3|0))*7,2.7,0,7);ctx.fill(); } ctx.globalAlpha=1;
+  if(L.readyBoxes.length){ ctx.fillStyle=hue; ctx.font="600 8px "+css('--mono'); ctx.fillText(L.readyBoxes.length+" ready",bx,y-8); }
+  // bottles
+  for(const b of L.bottles){ if(b.state!=="boxed") drawBottle(b,y,hue); }
+  // this line's robot + pallet + scale
+  drawPallet(L); drawArm(L);
+}
+function drawBottle(b,y,hue){
+  const heap=(b.state==="rejecting"||b.state==="piled");
+  const x=heap?b.px:b.x, yy=heap?b.py:y-6, sc=heap?.68:1, tl=heap?(b.tilt||0):0;
+  let body=hue; if(b.result==="pass")body=css('--good'); if(b.result==="fail")body=css('--crit');
+  ctx.save(); ctx.translate(x,yy); ctx.rotate(tl); ctx.scale(sc,sc);
+  if(b.result==="fail"&&b.state==="rejecting"){ctx.shadowColor=css('--crit');ctx.shadowBlur=10;}
+  ctx.fillStyle=body; rr(-6,-18,12,20,3); ctx.fill(); ctx.shadowBlur=0;
+  ctx.fillStyle="rgba(255,255,255,.28)"; rr(-6,-18,3.5,20,3); ctx.fill();
+  ctx.fillStyle=body; rr(-3,-24,6,7,2); ctx.fill(); ctx.fillStyle="#0a1024"; rr(-4.5,-27,9,4,2); ctx.fill();
+  ctx.restore();
+}
+function drawPallet(L){
+  const P=L.pallet, px=palletX()+P.x, py=palletY(L), hue=css(L.hue);
+  ctx.fillStyle="rgba(150,120,80,.15)"; ctx.strokeStyle="rgba(180,150,100,.5)"; ctx.lineWidth=1.4;
+  rr(px-30,py+12,64,10,3); ctx.fill(); ctx.stroke();
+  P.boxes.forEach((b,s)=>{ const sx=px-24+(s%3)*18, sy=py-4-((s/3|0))*14;
+    ctx.fillStyle=hue; ctx.globalAlpha=.9; rr(sx-8,sy-8,17,14,3); ctx.fill(); ctx.globalAlpha=1;
+    ctx.strokeStyle="rgba(0,0,0,.3)"; ctx.stroke(); });
+  // scale
+  ctx.strokeStyle=css('--line2'); ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(scaleX()-26,py+26);ctx.lineTo(scaleX()+26,py+26);ctx.stroke();
+  ctx.fillStyle=css('--faint'); ctx.font="8px "+css('--mono'); ctx.textAlign="center";
+  const over = L.shipped.lastKg>CFG.palletSpecKg+CFG.palletTolKg;
+  ctx.fillStyle = P.state==="weigh"?css('--warn'):over?css('--crit'):css('--faint');
+  const scLbl = P.state==="weigh"?"WEIGH "+(P.wtG/1000).toFixed(2)+"kg"
+    : P.state==="ship"?"SHIP "+L.shipped.lastKg.toFixed(2)+"kg →"
+    : L.shipped.lastKg?("last "+L.shipped.lastKg.toFixed(2)+"kg"):"SCALE";
+  ctx.fillText(scLbl, scaleX(), py+37);
+  ctx.fillStyle=css('--faint'); ctx.fillText("PALLET "+P.n+"/"+CFG.palletSize, palletX(), py+37);
+}
+function drawArm(L){
+  const R=L.robot, base=robotBase(L), l1=L1(), l2=L2(), ee=R.ee;
+  let dx=ee.x-base.x, dy=ee.y-base.y, d=Math.min(Math.hypot(dx,dy),l1+l2-1); d=Math.max(d,Math.abs(l1-l2)+1);
+  const a=Math.atan2(dy,dx), ca=Math.acos((d*d+l1*l1-l2*l2)/(2*d*l1));
+  const s1=a-ca, elbow={x:base.x+l1*Math.cos(s1),y:base.y+l1*Math.sin(s1)}, tip={x:base.x+d*Math.cos(a),y:base.y+d*Math.sin(a)};
+  // floor + pedestal
+  ctx.strokeStyle=css('--line'); ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(base.x-40,base.y+16);ctx.lineTo(base.x+40,base.y+16);ctx.stroke();
+  ctx.fillStyle=css('--panel2'); ctx.strokeStyle=css('--line2'); ctx.lineWidth=1.4; rr(base.x-13,base.y+2,26,16,3); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(base.x,base.y,8,0,7); ctx.fillStyle=css('--teal'); ctx.fill();
+  ctx.lineCap="round"; ctx.strokeStyle=css('--mid'); ctx.lineWidth=7;
+  ctx.beginPath(); ctx.moveTo(base.x,base.y); ctx.lineTo(elbow.x,elbow.y); ctx.stroke();
+  ctx.strokeStyle=css('--ink'); ctx.lineWidth=5.5; ctx.beginPath(); ctx.moveTo(elbow.x,elbow.y); ctx.lineTo(tip.x,tip.y); ctx.stroke();
+  for(const j of [elbow,tip]){ ctx.fillStyle=css('--teal'); ctx.beginPath(); ctx.arc(j.x,j.y,4,0,7); ctx.fill(); }
+  if(R.carry){ ctx.fillStyle=css(L.hue); ctx.globalAlpha=.95; rr(tip.x-9,tip.y-2,18,14,3); ctx.fill(); ctx.globalAlpha=1; ctx.strokeStyle="rgba(0,0,0,.3)"; ctx.stroke(); }
+  else { ctx.strokeStyle=css('--teal'); ctx.lineWidth=2.2; ctx.beginPath();
+    ctx.moveTo(tip.x-5,tip.y);ctx.lineTo(tip.x-5,tip.y+6); ctx.moveTo(tip.x+5,tip.y);ctx.lineTo(tip.x+5,tip.y+6); ctx.stroke(); }
+  ctx.fillStyle=css('--faint'); ctx.font="8px "+css('--mono'); ctx.textAlign="center"; ctx.fillText("6-AXIS", base.x, base.y+30);
+}
+
+// ── controls ───────────────────────────────────────────────────────────
+const ctrlEl=document.getElementById('controls');
+LINES.forEach(L=>{ const d=document.createElement('div'); d.className="lc"; d.style.setProperty('--hue',css(L.hue));
+  const stn=[["fill","Filler"],["cap","Capper"],["label","Labeller"]];
+  d.innerHTML=`<div class="name"><span class="dot" style="background:${css(L.hue)}"></span>Line ${L.id}</div>`+
+    stn.map(([k,nm])=>`<div class="st"><div class="r"><span>${nm}</span><b id="v-${L.id}-${k}">–</b></div>
+      <input type="range" min="0" max="100" value="0" id="w-${L.id}-${k}"><div class="r"><span>wear</span><b id="p-${L.id}-${k}">0%</b></div></div>`).join('')+
+    `<button class="maint" id="m-${L.id}">Maintain ${L.id}</button>`;
+  ctrlEl.appendChild(d);
+  stn.forEach(([k])=>{ document.getElementById(`w-${L.id}-${k}`).oninput=e=>{ L.wear[k]=+e.target.value/100;
+    document.getElementById(`p-${L.id}-${k}`).textContent=e.target.value+'%'; }; });
+  document.getElementById('m-'+L.id).onclick=()=>{ ['fill','cap','label'].forEach(k=>{ L.wear[k]=0;
+    const s=document.getElementById(`w-${L.id}-${k}`); s.value=0; document.getElementById(`p-${L.id}-${k}`).textContent='0%'; }); };
+});
+const bar=document.createElement('div'); bar.className="bar";
+bar.innerHTML=`<button class="btn primary" id="playBtn">Pause</button><button class="btn" id="resetBtn">Reset</button>
+  <div class="speed">Speed <input type="range" id="speed" min="0.25" max="4" step="0.25" value="1"><span id="speedTxt">1.0×</span></div>
+  <div class="hint">Each line has its own robot & pallet — neglect one and watch its shipped pallets fall & run heavy</div>`;
+ctrlEl.appendChild(bar);
+
+// ── HUD ────────────────────────────────────────────────────────────────
+let rejectLog=[];
+function logReject(L,reason){ rejectLog.unshift({id:L.id,reason,hue:L.hue}); if(rejectLog.length>60)rejectLog.pop();
+  document.getElementById('log').innerHTML=rejectLog.map(r=>
+    `<li><span class="ln" style="color:${css(r.hue)}">${r.id}</span><span>${r.reason}</span></li>`).join('')
+    || '<li class="empty">No rejects yet.</li>'; }
+const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+function hud(){
+  const m=LINES.map(L=>L.metrics());
+  const rows=[
+    ["OEE", i=>Math.round(m[i].oee*100)+'%', 'hi'],
+    ["Reject rate", i=>(m[i].rejRate*100).toFixed(1)+'%', 'lo'],
+    ["Avg weight", i=>m[i].avgW.toFixed(1)+' g', 'target'],
+    ["Weight ±σ", i=>'±'+m[i].stdW.toFixed(2)+' g', 'lo'],
+    ["Capper power", i=>m[i].power.toFixed(2)+' kW', 'lo'],
+    ["Cost / 100u", i=>'$'+m[i].costPer100.toFixed(2), 'lo'],
+    ["Pallets shipped", i=>String(m[i].pallets), 'hi', true],
+    ["Pallet weight", i=>m[i].palletKg?m[i].palletKg.toFixed(2)+' kg':'—', 'targetPallet'],
+  ];
+  document.getElementById('cmpBody').innerHTML = rows.map(([label,fn,mode,sep])=>{
+    const a=fn(0), b=fn(1), va=parseFloat(a), vb=parseFloat(b);
+    let win=-1;
+    if(mode==='hi') win=va>vb?0:va<vb?1:-1;
+    else if(mode==='lo') win=va<vb?0:va>vb?1:-1;
+    else if(mode==='target'){ const da=Math.abs(va-500),db=Math.abs(vb-500); win=da<db?0:da>db?1:-1; }
+    else if(mode==='targetPallet'){ if(isNaN(va)||isNaN(vb))win=-1; else {const da=Math.abs(va-CFG.palletSpecKg),db=Math.abs(vb-CFG.palletSpecKg); win=da<db?0:da>db?1:-1;} }
+    const ca=win===0?'win':win===1?'lose':'', cb=win===1?'win':win===0?'lose':'';
+    return `<tr class="${sep?'sep':''}"><td>${label}</td><td class="${ca}">${a}</td><td class="${cb}">${b}</td></tr>`;
+  }).join('');
+  LINES.forEach(L=>{ const setb=(k,val,out)=>{ const e=document.getElementById(`v-${L.id}-${k}`); if(e){e.textContent=val;e.classList.toggle('out',out);} };
+    setb('fill',L.telem.weight.toFixed(1),L.telem.weight>SPEC.weightHi||L.telem.weight<SPEC.weightLo);
+    setb('cap',L.telem.torque.toFixed(2),L.telem.torque<SPEC.torqueLo);
+    setb('label',L.telem.vib.toFixed(1),L.telem.vib>4.5); });
+}
+
+// ── tag stream (authority) ─────────────────────────────────────────────
+function getTags(){ const t={}; LINES.forEach(L=>{ const m=L.metrics();
+  t[`${L.id}/oee`]=+m.oee.toFixed(3); t[`${L.id}/reject_rate`]=+m.rejRate.toFixed(3);
+  t[`${L.id}/weight_g`]=+L.telem.weight.toFixed(2); t[`${L.id}/weight_std`]=+m.stdW.toFixed(2);
+  t[`${L.id}/cap_torque_nm`]=+L.telem.torque.toFixed(3); t[`${L.id}/cap_power_kw`]=+L.telem.power.toFixed(2);
+  t[`${L.id}/vibration_mms`]=+L.telem.vib.toFixed(2); t[`${L.id}/cost_per_100u`]=+m.costPer100.toFixed(2);
+  t[`${L.id}/pallets_shipped`]=m.pallets; t[`${L.id}/pallet_weight_kg`]=+m.palletKg.toFixed(2); }); return t; }
+window.getTags=getTags;
+
+// ── loop & controls ────────────────────────────────────────────────────
+let last=performance.now();
+function frame(now){ const raw=(now-last)/1000; last=now;
+  if(running) update(Math.min(raw,0.05)*speed); draw(); hud(); requestAnimationFrame(frame); }
+LINES.forEach(L=>L.t0=0); requestAnimationFrame(frame);
+const stateEl=document.getElementById('state'), stateTxt=document.getElementById('stateTxt');
+document.getElementById('playBtn').onclick=e=>{ running=!running; e.target.textContent=running?'Pause':'Start';
+  stateEl.classList.toggle('paused',!running); stateTxt.textContent=running?'RUNNING':'PAUSED'; };
+document.getElementById('resetBtn').onclick=()=>{ LINES.forEach(L=>{ L.bottles=[];L.box={fill:0,wt:0};L.readyBoxes=[];L.traySlot=0;
+  L.made=0;L.good=0;L.reject=0;L.weights=[];L.matWasteG=0;L.elecKWh=0;L.scrapUnits=0;L.t0=simTime;
+  L.robot={state:"idle",ee:{x:0,y:0},carry:null,t:0}; L.pallet={n:0,x:0,state:"load",boxes:[],wtG:0,t:0};
+  L.shipped={pallets:0,units:0,lastKg:0}; for(const k in L.reasons)L.reasons[k]=0; });
+  rejectLog=[]; document.getElementById('log').innerHTML='<li class="empty">No rejects yet.</li>'; };
+document.getElementById('speed').oninput=e=>{ speed=+e.target.value; document.getElementById('speedTxt').textContent=speed.toFixed(2).replace(/0$/,'')+'×'; };
+</script>
+</body>
+</html>
